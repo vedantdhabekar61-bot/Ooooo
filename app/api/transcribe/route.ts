@@ -23,15 +23,25 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ text: transcription.text });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Transcription error:', error);
     
-    // Provide more descriptive error messages
-    let errorMessage = error.message || 'Transcription failed';
-    if (error.status === 401) {
-      errorMessage = 'Invalid OpenAI API Key. Please check your Secrets.';
+    let errorMessage = 'Transcription failed';
+    let statusCode = 500;
+
+    // Safely type-guard the error to access its properties
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Check if it's an API error with a status code attached
+      if ('status' in error && typeof error.status === 'number') {
+        statusCode = error.status;
+        if (error.status === 401) {
+          errorMessage = 'Invalid OpenAI API Key. Please check your Secrets.';
+        }
+      }
     }
 
-    return NextResponse.json({ error: errorMessage }, { status: error.status || 500 });
+    return NextResponse.json({ error: errorMessage }, { status: statusCode });
   }
 }
