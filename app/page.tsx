@@ -187,11 +187,12 @@ export default function NoteApp() {
         body: formData,
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Transcription failed');
+        throw new Error(data.error || 'Transcription failed');
       }
 
-      const data = await response.json();
       const text = data.text?.trim();
 
       if (text) {

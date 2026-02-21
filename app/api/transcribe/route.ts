@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOpenAI } from '@/lib/openai';
+import { toFile } from 'openai';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,8 +13,9 @@ export async function POST(req: NextRequest) {
 
     const openai = getOpenAI();
 
-    // Convert Blob to File for OpenAI SDK using native File
-    const file = new File([audioFile], 'audio.webm', { type: 'audio/webm' });
+    // Convert Blob to a format OpenAI SDK likes using toFile helper
+    const buffer = Buffer.from(await audioFile.arrayBuffer());
+    const file = await toFile(buffer, 'audio.webm', { type: 'audio/webm' });
 
     const transcription = await openai.audio.transcriptions.create({
       file: file,
@@ -23,6 +25,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ text: transcription.text });
   } catch (error: any) {
     console.error('Transcription error:', error);
-    return NextResponse.json({ error: error.message || 'Transcription failed' }, { status: 500 });
+    
+    // Provide more descriptive error messages
+    let errorMessage = error.message || 'Transcription failed';
+    if (error.status === 401) {
+      errorMessage = 'Invalid OpenAI API Key. Please check your Secrets.';
+    }
+
+    return NextResponse.json({ error: errorMessage }, { status: error.status || 500 });
   }
 }
