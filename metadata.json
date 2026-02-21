@@ -1,0 +1,7 @@
+{
+  "name": "Brutalist Notes",
+  "description": "A simple, minimalist note-taking app with a brutalist aesthetic and voice-to-text capabilities.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
