@@ -49,8 +49,10 @@ export default function NoteApp() {
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // FIX 1: Correct TypeScript typing for browser intervals
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
+  const mimeTypeRef = useRef<string>('audio/webm');
 
   // Load notes from local storage
   useEffect(() => {
@@ -75,12 +77,15 @@ export default function NoteApp() {
   const addNote = (content?: string) => {
     const finalContent = content || newNoteContent;
     if (!finalContent.trim()) return;
+
     const newNote: Note = {
       id: crypto.randomUUID(),
       content: finalContent,
       createdAt: Date.now(),
     };
-    setNotes([newNote, ...notes]);
+
+    // FIX 2: Functional state update prevents stale data bugs
+    setNotes((prev) => [newNote, ...prev]);
     setNewNoteContent('');
     setIsAdding(false);
   };
@@ -105,18 +110,16 @@ export default function NoteApp() {
   };
 
   // --- Voice Logic ---
-  const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
+  const startRecording = async (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
     e.preventDefault();
-    
-    // 1. Instant Response (< 100ms)
     setIsRecording(true);
     setVoiceError(null);
     setRecordingTime(0);
     
     const now = Date.now();
     startTimeRef.current = now;
-    
-    if ('vibrate' in navigator) navigator.vibrate(40); // Light haptic
+
+    if ('vibrate' in navigator) navigator.vibrate(40);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setVoiceError("Microphone not supported.");
@@ -126,7 +129,14 @@ export default function NoteApp() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      // FIX 3: Dynamic MIME type support for Safari/iOS compatibility
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
+        ? 'audio/webm' 
+        : 'audio/mp4';
+      mimeTypeRef.current = mimeType;
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -135,7 +145,7 @@ export default function NoteApp() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
         await handleTranscription(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -143,10 +153,17 @@ export default function NoteApp() {
       mediaRecorder.start();
       
       timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(prev => {
+          // Optional: Auto-stop after 30 seconds
+          if (prev >= 29) {
+            stopRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
       }, 1000);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Mic error:", err);
       setVoiceError("Permission denied.");
       setIsRecording(false);
@@ -157,7 +174,7 @@ export default function NoteApp() {
     if (!isRecording) return;
     
     const duration = Date.now() - startTimeRef.current;
-    
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
@@ -165,7 +182,7 @@ export default function NoteApp() {
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
     
-    if ('vibrate' in navigator) navigator.vibrate(30); // Stop haptic
+    if ('vibrate' in navigator) navigator.vibrate([40, 30, 40]); // Success pattern
 
     // If tap was too short, don't process
     if (duration < 300) {
@@ -175,12 +192,13 @@ export default function NoteApp() {
   };
 
   const handleTranscription = async (blob: Blob) => {
-    if (blob.size < 1000) return; // Ignore tiny files
+    if (blob.size < 1000) return;
     
     setIsProcessing(true);
+
     try {
       const formData = new FormData();
-      formData.append('file', blob, 'audio.webm');
+      formData.append('file', blob, 'audio.webm'); // OpenAI accepts webm file names even if blob is mp4
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -194,7 +212,7 @@ export default function NoteApp() {
       }
 
       const text = data.text?.trim();
-
+      
       if (text) {
         addNote(text);
       } else {
@@ -211,10 +229,8 @@ export default function NoteApp() {
 
   return (
     <main className="min-h-screen flex flex-col items-center p-4 md:p-8 pb-40">
-      {/* The Clipboard Container */}
       <div className="relative w-full max-w-2xl mt-12 mb-20">
         
-        {/* Header Tab */}
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20">
           <div className="bg-[#E6B3A3] border-[3px] border-black px-10 py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-sm">
             <h1 className="font-mono font-bold text-lg tracking-widest uppercase">
@@ -223,10 +239,8 @@ export default function NoteApp() {
           </div>
         </div>
 
-        {/* Main Note Area */}
         <div className="bg-white border-[3px] border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] min-h-[70vh] p-6 md:p-10 relative">
           
-          {/* Add Note Button */}
           <button
             onClick={() => setIsAdding(true)}
             className="absolute -bottom-6 -right-6 bg-black text-white p-4 rounded-full shadow-[4px_4px_0px_0px_rgba(230,179,163,1)] hover:-translate-y-1 hover:-translate-x-1 transition-transform active:translate-y-0 active:translate-x-0 group z-10"
@@ -235,7 +249,6 @@ export default function NoteApp() {
             <Plus className="w-8 h-8 group-hover:rotate-90 transition-transform duration-300" />
           </button>
 
-          {/* New Note Input */}
           <AnimatePresence>
             {isAdding && (
               <motion.div
@@ -272,7 +285,6 @@ export default function NoteApp() {
             )}
           </AnimatePresence>
 
-          {/* Notes List */}
           <div className="space-y-6">
             {notes.length === 0 && !isAdding && (
               <div className="flex flex-col items-center justify-center py-20 opacity-30 grayscale">
@@ -347,10 +359,8 @@ export default function NoteApp() {
         </div>
       </div>
 
-      {/* --- Voice Button Section --- */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-6 z-50 w-full max-w-md px-4">
         
-        {/* Status Overlay */}
         <AnimatePresence>
           {(isRecording || isProcessing || voiceError) && (
             <motion.div
@@ -393,9 +403,7 @@ export default function NoteApp() {
           )}
         </AnimatePresence>
 
-        {/* The Big Button Container */}
         <div className="relative">
-          {/* Outer Glow for Recording */}
           <AnimatePresence>
             {isRecording && (
               <motion.div
@@ -407,12 +415,11 @@ export default function NoteApp() {
             )}
           </AnimatePresence>
 
+          {/* FIX 4: Pointer events instead of touch/mouse events */}
           <motion.button
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onMouseLeave={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
+            onPointerDown={startRecording}
+            onPointerUp={stopRecording}
+            onPointerLeave={stopRecording}
             whileTap={{ scale: 0.9 }}
             animate={isRecording ? { scale: 1.2 } : { scale: 1 }}
             className={`
@@ -435,7 +442,6 @@ export default function NoteApp() {
         </p>
       </div>
 
-      {/* Footer Info */}
       <footer className="mt-auto py-8 text-center">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] opacity-50">
           Simple Brutalist Notes • {new Date().getFullYear()}
