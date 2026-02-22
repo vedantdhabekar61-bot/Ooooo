@@ -18,15 +18,8 @@ function VoiceWaveform() {
       {heights.map((h, i) => (
         <motion.div
           key={i}
-          animate={{
-            height: [10, h, 10],
-          }}
-          transition={{
-            duration: 0.4,
-            repeat: Infinity,
-            delay: i * 0.05,
-            ease: "easeInOut"
-          }}
+          animate={{ height: [10, h, 10] }}
+          transition={{ duration: 0.4, repeat: Infinity, delay: i * 0.05, ease: "easeInOut" }}
           className="w-1.5 bg-white rounded-full opacity-80"
         />
       ))}
@@ -49,7 +42,6 @@ export default function NoteApp() {
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  // FIX 1: Correct TypeScript typing for browser intervals
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const mimeTypeRef = useRef<string>('audio/webm');
@@ -60,9 +52,7 @@ export default function NoteApp() {
     if (savedNotes) {
       try {
         const parsed = JSON.parse(savedNotes);
-        if (Array.isArray(parsed)) {
-          setNotes(parsed);
-        }
+        if (Array.isArray(parsed)) setNotes(parsed);
       } catch (e) {
         console.error('Failed to parse notes', e);
       }
@@ -84,7 +74,6 @@ export default function NoteApp() {
       createdAt: Date.now(),
     };
 
-    // FIX 2: Functional state update prevents stale data bugs
     setNotes((prev) => [newNote, ...prev]);
     setNewNoteContent('');
     setIsAdding(false);
@@ -101,11 +90,7 @@ export default function NoteApp() {
 
   const saveEdit = () => {
     if (!editingId) return;
-    setNotes(
-      notes.map((note) =>
-        note.id === editingId ? { ...note, content: editContent } : note
-      )
-    );
+    setNotes(notes.map((note) => (note.id === editingId ? { ...note, content: editContent } : note)));
     setEditingId(null);
   };
 
@@ -122,7 +107,7 @@ export default function NoteApp() {
     if ('vibrate' in navigator) navigator.vibrate(40);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setVoiceError("Microphone not supported.");
+      setVoiceError("Microphone not supported. (Are you on HTTPS?)");
       setIsRecording(false);
       return;
     }
@@ -130,10 +115,7 @@ export default function NoteApp() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // FIX 3: Dynamic MIME type support for Safari/iOS compatibility
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
-        ? 'audio/webm' 
-        : 'audio/mp4';
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
       mimeTypeRef.current = mimeType;
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
@@ -154,7 +136,6 @@ export default function NoteApp() {
       
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => {
-          // Optional: Auto-stop after 30 seconds
           if (prev >= 29) {
             stopRecording();
             return 30;
@@ -182,23 +163,22 @@ export default function NoteApp() {
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
     
-    if ('vibrate' in navigator) navigator.vibrate([40, 30, 40]); // Success pattern
+    if ('vibrate' in navigator) navigator.vibrate([40, 30, 40]);
 
-    // If tap was too short, don't process
     if (duration < 300) {
-      setVoiceError("Hold to record");
+      setVoiceError("Hold longer to record");
       setTimeout(() => setVoiceError(null), 2000);
     }
   };
 
   const handleTranscription = async (blob: Blob) => {
     if (blob.size < 1000) return;
-    
+
     setIsProcessing(true);
 
     try {
       const formData = new FormData();
-      formData.append('file', blob, 'audio.webm'); // OpenAI accepts webm file names even if blob is mp4
+      formData.append('file', blob, 'audio.webm');
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -212,17 +192,17 @@ export default function NoteApp() {
       }
 
       const text = data.text?.trim();
-      
+
       if (text) {
         addNote(text);
       } else {
         setVoiceError("Couldn't hear clearly");
         setTimeout(() => setVoiceError(null), 3000);
       }
-      setIsProcessing(false);
     } catch (err) {
       console.error("Transcription error:", err);
       setVoiceError("Processing failed");
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -268,16 +248,10 @@ export default function NoteApp() {
                   }}
                 />
                 <div className="flex justify-end gap-2 mt-2">
-                  <button
-                    onClick={() => setIsAdding(false)}
-                    className="p-2 border-2 border-black hover:bg-red-200 transition-colors"
-                  >
+                  <button onClick={() => setIsAdding(false)} className="p-2 border-2 border-black hover:bg-red-200 transition-colors">
                     <X className="w-5 h-5" />
                   </button>
-                  <button
-                    onClick={() => addNote()}
-                    className="p-2 border-2 border-black bg-black text-white hover:bg-gray-800 transition-colors"
-                  >
+                  <button onClick={() => addNote()} className="p-2 border-2 border-black bg-black text-white hover:bg-gray-800 transition-colors">
                     <Check className="w-5 h-5" />
                   </button>
                 </div>
@@ -312,16 +286,10 @@ export default function NoteApp() {
                         className="w-full bg-[#F5F2ED] border-2 border-black p-2 outline-none resize-none font-sans text-lg min-h-[80px]"
                       />
                       <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="p-1 border border-black hover:bg-gray-200"
-                        >
+                        <button onClick={() => setEditingId(null)} className="p-1 border border-black hover:bg-gray-200">
                           <X className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={saveEdit}
-                          className="p-1 border border-black bg-black text-white"
-                        >
+                        <button onClick={saveEdit} className="p-1 border border-black bg-black text-white">
                           <Check className="w-4 h-4" />
                         </button>
                       </div>
@@ -336,16 +304,10 @@ export default function NoteApp() {
                           {new Date(note.createdAt).toLocaleDateString()} • {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => startEditing(note)}
-                            className="p-1 hover:bg-black hover:text-white border border-transparent hover:border-black transition-all"
-                          >
+                          <button onClick={() => startEditing(note)} className="p-1 hover:bg-black hover:text-white border border-transparent hover:border-black transition-all">
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => deleteNote(note.id)}
-                            className="p-1 hover:bg-red-500 hover:text-white border border-transparent hover:border-black transition-all"
-                          >
+                          <button onClick={() => deleteNote(note.id)} className="p-1 hover:bg-red-500 hover:text-white border border-transparent hover:border-black transition-all">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -360,7 +322,6 @@ export default function NoteApp() {
       </div>
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-6 z-50 w-full max-w-md px-4">
-        
         <AnimatePresence>
           {(isRecording || isProcessing || voiceError) && (
             <motion.div
@@ -391,10 +352,7 @@ export default function NoteApp() {
               {voiceError && (
                 <div className="flex items-center justify-between w-full py-2">
                   <span className="font-mono text-sm text-red-400 font-bold uppercase">{voiceError}</span>
-                  <button 
-                    onClick={() => setVoiceError(null)}
-                    className="text-[10px] font-mono border border-white/20 px-2 py-1 rounded hover:bg-white/10"
-                  >
+                  <button onClick={() => setVoiceError(null)} className="text-[10px] font-mono border border-white/20 px-2 py-1 rounded hover:bg-white/10">
                     DISMISS
                   </button>
                 </div>
@@ -415,15 +373,17 @@ export default function NoteApp() {
             )}
           </AnimatePresence>
 
-          {/* FIX 4: Pointer events instead of touch/mouse events */}
+          {/* FIX: Added touchAction and onContextMenu to fix mobile hold-to-record bugs */}
           <motion.button
             onPointerDown={startRecording}
             onPointerUp={stopRecording}
             onPointerLeave={stopRecording}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ touchAction: 'none' }}
             whileTap={{ scale: 0.9 }}
             animate={isRecording ? { scale: 1.2 } : { scale: 1 }}
             className={`
-              w-24 h-24 rounded-full flex items-center justify-center border-[4px] border-black transition-all duration-200 relative z-10
+              w-24 h-24 rounded-full flex items-center justify-center border-[4px] border-black transition-all duration-200 relative z-10 select-none
               ${isRecording ? 'bg-red-500' : 'bg-[#E6B3A3] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:shadow-none active:translate-x-1 active:translate-y-1'}
             `}
@@ -437,7 +397,7 @@ export default function NoteApp() {
           </motion.button>
         </div>
         
-        <p className="font-mono text-[10px] uppercase tracking-[0.3em] opacity-40 font-bold">
+        <p className="font-mono text-[10px] uppercase tracking-[0.3em] opacity-40 font-bold select-none">
           {isRecording ? 'Release to finish' : 'Hold to speak'}
         </p>
       </div>
