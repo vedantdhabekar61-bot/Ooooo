@@ -1,47 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getOpenAI } from '@/lib/openai';
-import { toFile } from 'openai';
+import { NextResponse } from 'next/server';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const formData = await req.formData();
-    const audioFile = formData.get('file') as Blob;
+    // 1. Get the form data sent from page.tsx
+    const formData = await request.formData();
+    const file = formData.get('file') as Blob;
 
-    if (!audioFile) {
+    if (!file) {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
     }
 
-    const openai = getOpenAI();
+    // 2. Prepare the payload for OpenAI
+    // We package the blob into a new FormData object specifically for OpenAI
+    const openAiFormData = new FormData();
+    openAiFormData.append('file', file, 'audio.webm'); 
+    openAiFormData.append('model', 'whisper-1');
 
-    // Convert Blob to a format OpenAI SDK likes using toFile helper
-    const buffer = Buffer.from(await audioFile.arrayBuffer());
-    const file = await toFile(buffer, 'audio.webm', { type: 'audio/webm' });
-
-    const transcription = await openai.audio.transcriptions.create({
-      file: file,
-      model: 'whisper-1',
+    // 3. Call the OpenAI Whisper API directly
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: openAiFormData,
     });
 
-    return NextResponse.json({ text: transcription.text });
-  } catch (error: unknown) {
-    console.error('Transcription error:', error);
-    
-    let errorMessage = 'Transcription failed';
-    let statusCode = 500;
+    const data = await response.json();
 
-    // Safely type-guard the error to access its properties
-    if (error instanceof Error) {
-      errorMessage = error.message;
-      
-      // Check if it's an API error with a status code attached
-      if ('status' in error && typeof error.status === 'number') {
-        statusCode = error.status;
-        if (error.status === 401) {
-          errorMessage = 'Invalid OpenAI API Key. Please check your Secrets.';
-        }
-      }
+    if (!response.ok) {
+      console.error("OpenAI API Error:", data);
+      return NextResponse.json(
+        { error: data.error?.message || 'Transcription failed at OpenAI' }, 
+        { status: response.status }
+      );
     }
 
-    return NextResponse.json({ error: errorMessage }, { status: statusCode });
+    // 4. Return the transcribed text to the frontend
+    return NextResponse.json({ text: data.text });
+
+  } catch (error) {
+    console.error('Server error during transcription:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
